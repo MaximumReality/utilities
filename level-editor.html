@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LEVEL EDITOR</title>
+    <style>
+        :root {
+            --green:  #00ff66;
+            --blue:   #00d4ff;
+            --red:    #ff0055;
+            --yellow: #ffe600;
+            --bg:     #0a0a0a;
+            --panel:  #111;
+        }
+
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--green);
+        font-family: 'Courier New', monospace;
+    }
+
+    body {
+        display: flex;
+        flex-direction: column;
+        height: 100dvh;
+    }
+
+    /* ── TOP HUD ── */
+    #hud {
+        flex-shrink: 0;
+        background: #000;
+        border-bottom: 2px solid var(--green);
+        padding: 8px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        z-index: 500;
+    }
+    #hud-title {
+        font-size: 11px;
+        letter-spacing: 3px;
+        color: var(--green);
+        text-align: center;
+    }
+    #live-coord {
+        font-size: 12px;
+        color: var(--yellow);
+        text-align: center;
+        min-height: 16px;
+        letter-spacing: 1px;
+    }
+    #hud-buttons {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .hud-btn {
+        padding: 6px 14px;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    #btn-export  { background: var(--green);  color: #000; }
+    #btn-reset   { background: var(--red);    color: #fff; }
+    #btn-targets { background: var(--blue);   color: #000; }
+
+    /* ── IMAGE STAGE ── */
+    #stage {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        overflow: hidden;
+        background: #0d0d0d;
+    }
+
+    #stage-image {
+        display: block;
+        height: 100%;
+        width: auto;
+        max-width: 100%;
+        object-fit: contain;
+        pointer-events: none;
+        user-select: none;
+        opacity: 0.85;
+    }
+
+    /* Exact-fit overlay for coordinate math */
+    #hit-layer {
+        position: absolute;
+        pointer-events: none; /* stickers handle their own events */
+    }
+
+    /* Target dots — shown when "SHOW TARGETS" is on */
+    .target-dot {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--red);
+        transform: translate(-50%, -50%);
+        opacity: 0.7;
+        pointer-events: none;
+        border: 2px solid #fff;
+    }
+
+    /* ── LABEL BANK ── */
+    #bank {
+        flex-shrink: 0;
+        height: 110px;
+        background: var(--panel);
+        border-top: 2px solid #333;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        padding: 10px 12px;
+        justify-content: center;
+        align-content: flex-start;
+        overflow-y: auto;
+    }
+
+    /* ── STICKER ── */
+    .label-sticker {
+        padding: 6px 10px;
+        background: var(--blue);
+        color: #000;
+        font-weight: bold;
+        font-size: 11px;
+        border-radius: 4px;
+        touch-action: none;
+        user-select: none;
+        white-space: nowrap;
+        cursor: grab;
+    }
+    .label-sticker.placed {
+        background: var(--green) !important;
+        box-shadow: 0 0 10px var(--green);
+    }
+    .label-sticker.dragging {
+        position: fixed !important;
+        transform: translate(-50%, -50%) scale(1.1) !important;
+        z-index: 9999;
+        box-shadow: 0 0 20px var(--blue);
+        pointer-events: none;
+        background: var(--blue) !important;
+    }
+    .label-sticker.on-stage {
+        position: absolute !important;
+        transform: translate(-50%, -50%) !important;
+        z-index: 100;
+    }
+
+    /* ── EXPORT MODAL ── */
+    #export-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.92);
+        z-index: 99999;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        gap: 12px;
+    }
+    #export-modal.show { display: flex; }
+    #export-modal h2 {
+        color: var(--green);
+        letter-spacing: 3px;
+        font-size: 14px;
+    }
+    #export-output {
+        width: 100%;
+        max-width: 500px;
+        height: 220px;
+        background: #000;
+        color: var(--green);
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        border: 1px solid var(--green);
+        border-radius: 4px;
+        padding: 12px;
+        resize: none;
+    }
+    #btn-copy  { background: var(--green); color: #000; }
+    #btn-close { background: #333;         color: #fff; }
+
+    /* ── SETUP SCREEN ── */
+    #setup-screen {
+        position: fixed;
+        inset: 0;
+        background: var(--bg);
+        z-index: 88888;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 24px;
+    }
+    #setup-screen h1 {
+        color: var(--green);
+        font-size: 16px;
+        letter-spacing: 4px;
+        text-align: center;
+    }
+    #setup-screen p {
+        color: #666;
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-align: center;
+        max-width: 320px;
+    }
+    .setup-label {
+        color: var(--green);
+        font-size: 11px;
+        letter-spacing: 2px;
+        align-self: flex-start;
+        max-width: 340px;
+        width: 100%;
+    }
+    .setup-input {
+        width: 100%;
+        max-width: 340px;
+        background: #000;
+        border: 1px solid var(--green);
+        color: var(--green);
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        padding: 10px;
+        border-radius: 4px;
+        outline: none;
+    }
+    #labels-input {
+        height: 100px;
+        resize: none;
+    }
+    #img-upload-label {
+        display: block;
+        width: 100%;
+        max-width: 340px;
+        padding: 10px;
+        background: #000;
+        border: 1px dashed var(--green);
+        border-radius: 4px;
+        text-align: center;
+        font-size: 11px;
+        color: var(--green);
+        letter-spacing: 1px;
+        cursor: pointer;
+    }
+    #img-upload { display: none; }
+    #btn-launch {
+        background: var(--green);
+        color: #000;
+        padding: 12px 32px;
+        font-size: 13px;
+        letter-spacing: 2px;
+        margin-top: 4px;
+    }
+</style>
+
+
+</head>
+<body>
+
+<!-- ── SETUP SCREEN ── -->
+
+<div id="setup-screen">
+    <h1>// LEVEL EDITOR</h1>
+    <p>Drop in any image + label list.<br>Drag to place. Export coordinates.</p>
+
+
+<span class="setup-label">1. UPLOAD IMAGE</span>
+<label id="img-upload-label">
+    TAP TO CHOOSE IMAGE
+    <input type="file" id="img-upload" accept="image/*">
+</label>
+
+<span class="setup-label">2. PASTE LABELS (one per line)</span>
+<textarea class="setup-input" id="labels-input" placeholder="cranium&#10;mandible&#10;clavicle&#10;scapula&#10;humerus"></textarea>
+
+<button class="hud-btn" id="btn-launch">LAUNCH EDITOR</button>
+
+
+</div>
+
+<!-- ── MAIN EDITOR ── -->
+
+<div id="hud">
+    <div id="hud-title">// LEVEL EDITOR</div>
+    <div id="live-coord">drag a label onto the image...</div>
+    <div id="hud-buttons">
+        <button class="hud-btn" id="btn-targets">SHOW TARGETS</button>
+        <button class="hud-btn" id="btn-export">EXPORT CONFIG</button>
+        <button class="hud-btn" id="btn-reset">RESET ALL</button>
+    </div>
+</div>
+
+<div id="stage">
+    <img id="stage-image" alt="diagram">
+    <div id="hit-layer"></div>
+</div>
+
+<div id="bank"></div>
+
+<!-- ── EXPORT MODAL ── -->
+
+<div id="export-modal">
+    <h2>// EXPORT CONFIG</h2>
+    <textarea id="export-output" readonly></textarea>
+    <div style="display:flex;gap:10px;">
+        <button class="hud-btn" id="btn-copy">COPY</button>
+        <button class="hud-btn" id="btn-close">CLOSE</button>
+    </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+const placed    = {};   // id → { left%, top% }
+let showTargets = false;
+
+const setupScreen  = document.getElementById('setup-screen');
+const stageImage   = document.getElementById('stage-image');
+const hitLayer     = document.getElementById('hit-layer');
+const bank         = document.getElementById('bank');
+const liveCoord    = document.getElementById('live-coord');
+const exportModal  = document.getElementById('export-modal');
+const exportOutput = document.getElementById('export-output');
+
+// ─────────────────────────────────────────────
+// SETUP
+// ─────────────────────────────────────────────
+document.getElementById('img-upload').addEventListener('change', function() {
+    if (!this.files[0]) return;
+    document.getElementById('img-upload-label').textContent = '✓ ' + this.files[0].name;
+});
+
+document.getElementById('btn-launch').addEventListener('click', () => {
+    const fileInput  = document.getElementById('img-upload');
+    const labelsRaw  = document.getElementById('labels-input').value.trim();
+
+    if (!fileInput.files[0]) { alert('Please choose an image first.'); return; }
+    if (!labelsRaw)           { alert('Please enter at least one label.'); return; }
+
+    const labels = labelsRaw.split('\n').map(l => l.trim()).filter(Boolean);
+
+    // Load image as object URL
+    const url = URL.createObjectURL(fileInput.files[0]);
+    stageImage.src = url;
+    stageImage.addEventListener('load', syncHitLayer);
+
+    // Build stickers
+    labels.forEach(label => buildSticker(label));
+
+    setupScreen.style.display = 'none';
+});
+
+// ─────────────────────────────────────────────
+// HIT LAYER — mirrors rendered image exactly
+// ─────────────────────────────────────────────
+function syncHitLayer() {
+    const ir = stageImage.getBoundingClientRect();
+    const cr = document.getElementById('stage').getBoundingClientRect();
+    hitLayer.style.width   = ir.width  + 'px';
+    hitLayer.style.height  = ir.height + 'px';
+    hitLayer.style.left    = (ir.left - cr.left) + 'px';
+    hitLayer.style.top     = (ir.top  - cr.top)  + 'px';
+    hitLayer.style.transform = 'none';
+    hitLayer.style.position  = 'absolute';
+}
+window.addEventListener('resize', syncHitLayer);
+requestAnimationFrame(syncHitLayer);
+
+// ─────────────────────────────────────────────
+// COORDINATE CONVERSION
+// clientX/Y → % inside the rendered image
+// ─────────────────────────────────────────────
+function clientToPercent(cx, cy) {
+    const ir = stageImage.getBoundingClientRect();
+    return {
+        px: ((cx - ir.left) / ir.width)  * 100,
+        py: ((cy - ir.top)  / ir.height) * 100
+    };
+}
+
+// ─────────────────────────────────────────────
+// BUILD STICKER
+// ─────────────────────────────────────────────
+function buildSticker(label) {
+    const id  = label.toLowerCase().replace(/\s+/g, '_');
+    const div = document.createElement('div');
+    div.className   = 'label-sticker';
+    div.textContent = label.toUpperCase();
+    div.dataset.id  = id;
+    div.dataset.label = label;
+    bank.appendChild(div);
+
+    div.addEventListener('touchstart', onTouchStart, { passive: true });
+    div.addEventListener('touchmove',  onTouchMove,  { passive: false });
+    div.addEventListener('touchend',   onTouchEnd,   { passive: true });
+}
+
+// ─────────────────────────────────────────────
+// TOUCH HANDLERS
+// ─────────────────────────────────────────────
+function onTouchStart(e) {
+    const touch = e.touches[0];
+    this.classList.remove('placed', 'on-stage');
+    this.classList.add('dragging');
+    document.body.appendChild(this);
+    moveEl(this, touch.clientX, touch.clientY);
+
+    // Remove from placed if re-dragging
+    delete placed[this.dataset.id];
+    refreshTargetDots();
+}
+
+function onTouchMove(e) {
+    e.preventDefault();
+    const touch = e.targetTouches[0];
+    moveEl(this, touch.clientX, touch.clientY);
+
+    // Live coordinate readout
+    const { px, py } = clientToPercent(touch.clientX, touch.clientY);
+    const inBounds = px >= 0 && px <= 100 && py >= 0 && py <= 100;
+    liveCoord.textContent = inBounds
+        ? `${this.dataset.label.toUpperCase()} → top: ${py.toFixed(1)}%  left: ${px.toFixed(1)}%`
+        : `${this.dataset.label.toUpperCase()} → (outside image)`;
+}
+
+function onTouchEnd(e) {
+    const touch = e.changedTouches[0];
+    this.classList.remove('dragging');
+
+    const { px, py } = clientToPercent(touch.clientX, touch.clientY);
+    const inBounds = px >= 0 && px <= 100 && py >= 0 && py <= 100;
+
+    if (inBounds) {
+        // Place on hit-layer
+        const leftStr = px.toFixed(1) + '%';
+        const topStr  = py.toFixed(1) + '%';
+        this.style.left = leftStr;
+        this.style.top  = topStr;
+        this.classList.add('on-stage', 'placed');
+        hitLayer.appendChild(this);
+
+        placed[this.dataset.id] = { left: leftStr, top: topStr };
+        liveCoord.textContent = `✓ ${this.dataset.label.toUpperCase()} placed at top: ${topStr}  left: ${leftStr}`;
+    } else {
+        // Return to bank
+        this.style.left = this.style.top = '';
+        this.classList.remove('placed', 'on-stage');
+        bank.appendChild(this);
+        liveCoord.textContent = 'dropped outside image — returned to bank';
+    }
+
+    refreshTargetDots();
+}
+
+function moveEl(el, cx, cy) {
+    el.style.left = cx + 'px';
+    el.style.top  = cy + 'px';
+}
+
+// ─────────────────────────────────────────────
+// TARGET DOTS
+// ─────────────────────────────────────────────
+function refreshTargetDots() {
+    hitLayer.querySelectorAll('.target-dot').forEach(d => d.remove());
+    if (!showTargets) return;
+    Object.entries(placed).forEach(([id, pos]) => {
+        const dot = document.createElement('div');
+        dot.className = 'target-dot';
+        dot.style.left = pos.left;
+        dot.style.top  = pos.top;
+        dot.title = id;
+        hitLayer.appendChild(dot);
+    });
+}
+
+document.getElementById('btn-targets').addEventListener('click', function() {
+    showTargets = !showTargets;
+    this.style.background = showTargets ? 'var(--yellow)' : 'var(--blue)';
+    this.style.color = '#000';
+    this.textContent = showTargets ? 'HIDE TARGETS' : 'SHOW TARGETS';
+    refreshTargetDots();
+});
+
+// ─────────────────────────────────────────────
+// EXPORT
+// ─────────────────────────────────────────────
+document.getElementById('btn-export').addEventListener('click', () => {
+    if (Object.keys(placed).length === 0) {
+        alert('No labels placed yet!');
+        return;
+    }
+    let out = 'const config = {\n';
+    Object.entries(placed).forEach(([id, pos]) => {
+        out += `    "${id}": { top: "${pos.top}", left: "${pos.left}" },\n`;
+    });
+    out += '};';
+    exportOutput.value = out;
+    exportModal.classList.add('show');
+});
+
+document.getElementById('btn-copy').addEventListener('click', () => {
+    exportOutput.select();
+    document.execCommand('copy');
+    document.getElementById('btn-copy').textContent = 'COPIED!';
+    setTimeout(() => document.getElementById('btn-copy').textContent = 'COPY', 1500);
+});
+
+document.getElementById('btn-close').addEventListener('click', () => {
+    exportModal.classList.remove('show');
+});
+
+// ─────────────────────────────────────────────
+// RESET
+// ─────────────────────────────────────────────
+document.getElementById('btn-reset').addEventListener('click', () => {
+    if (!confirm('Reset all placed labels?')) return;
+    Object.keys(placed).forEach(k => delete placed[k]);
+    document.querySelectorAll('.label-sticker').forEach(el => {
+        el.classList.remove('placed', 'on-stage', 'dragging');
+        el.style.left = el.style.top = '';
+        bank.appendChild(el);
+    });
+    hitLayer.querySelectorAll('.target-dot').forEach(d => d.remove());
+    liveCoord.textContent = 'drag a label onto the image...';
+});
+</script>
+
+</body>
+</html>
